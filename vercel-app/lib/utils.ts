@@ -108,14 +108,11 @@ export function resizeVolume(
         const srcJ = Math.floor((j / newW) * w);
         const srcK = Math.floor((k / newD) * d);
         
-        const idx = srcI * w * d + srcJ * d + srcK;
+        const srcIdx = srcI * w * d + srcJ * d + srcK;
         const newIdx = i * newW * newD + j * newD + k;
         
-        if (idx < h * w * d) {
-          const srcIdx = srcI * w * d + srcJ * d + srcK;
-          if (srcIdx < h * w * d) {
-            resized[newIdx] = volume[srcI]?.[srcJ]?.[srcK] || 0;
-          }
+        if (srcIdx >= 0 && srcIdx < h * w * d) {
+          resized[newIdx] = volume[srcI]?.[srcJ]?.[srcK] || 0;
         }
       }
     }

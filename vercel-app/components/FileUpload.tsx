@@ -31,9 +31,8 @@ export default function FileUpload({ onPredict, loading }: FileUploadProps) {
   const handleFileSelect = (modality: keyof typeof files, file: File | null) => {
     if (file) {
       // Validate file type (should be .nii or .nii.gz)
-      const validExtensions = ['.nii', '.gz'];
       const fileName = file.name.toLowerCase();
-      const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+      const isValid = fileName.endsWith('.nii') || fileName.endsWith('.nii.gz');
       
       if (!isValid) {
         alert(`Invalid file type for ${modality}. Please upload a .nii or .nii.gz file.`);

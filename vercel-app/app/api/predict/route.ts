@@ -8,7 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { extractTumorStatistics } from '@/lib/utils';
+import * as tf from '@tensorflow/tfjs-node';
+import { preprocessMRI, resizeVolume, stackModalities, extractTumorStatistics } from '@/lib/utils';
 
 // Model loading (should be initialized once and reused)
 let model: tf.LayersModel | null = null;
@@ -70,10 +71,14 @@ export async function POST(request: NextRequest) {
     };
 
     // Generate prediction (mock - replace with actual model inference)
-    const predictionShape = [128, 128, 96, 4];
-    const mockPrediction = new Array(predictionShape[0] * predictionShape[1] * predictionShape[2])
-      .fill(0)
-      .map(() => Math.floor(Math.random() * 4));
+    // For our current visualization/statistics we only need a single class
+    // label per voxel, so we generate a 1D array of length H * W * D with
+    // values in [0, 3] corresponding to background and 3 tumor classes.
+    const [H, W, D] = processedData.shape;
+    const voxelCount = H * W * D;
+    const mockPrediction = Array.from({ length: voxelCount }, () =>
+      Math.floor(Math.random() * 4)
+    );
 
     // Extract statistics
     const statistics = extractTumorStatistics(mockPrediction, processedData.shape);
