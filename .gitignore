@@ -55,3 +55,6 @@ wheels/
 # Data files (if large datasets are present)
 # *.nii
 # *.nii.gz
+
+# Local documents
+Documents/
