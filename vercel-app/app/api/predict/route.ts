@@ -10,29 +10,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractTumorStatistics } from '@/lib/utils';
 
-// Model loading (should be initialized once and reused)
-let model: any | null = null;
-
-async function loadModelOnce() {
-  if (!model) {
-    try {
-      // Option 1: Load from local converted model
-      // model = await tf.loadLayersModel('file:///path/to/model/model.json');
-      
-      // Option 2: Load from CDN/hosted URL
-      // model = await tf.loadLayersModel('https://your-cdn.com/model/model.json');
-      
-      // For now, return null if model not available
-      // In production, ensure model is converted to TF.js format and accessible
-      console.warn('Model not loaded. Please configure model path.');
-    } catch (error) {
-      console.error('Error loading model:', error);
-      throw error;
-    }
-  }
-  return model;
-}
-
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -50,17 +27,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Load model
-    const loadedModel = await loadModelOnce();
-    if (!loadedModel) {
-      return NextResponse.json(
-        { error: 'Model not available. Please ensure model is properly configured.' },
-        { status: 503 }
-      );
+    // If external inference API is configured, proxy the request there
+    const externalUrl = process.env.INFERENCE_API_URL;
+    if (externalUrl) {
+      const proxied = await fetch(externalUrl, {
+        method: 'POST',
+        body: formData as any,
+      });
+      if (!proxied.ok) {
+        const errText = await proxied.text();
+        return NextResponse.json(
+          { error: 'Upstream inference failed', details: errText },
+          { status: proxied.status }
+        );
+      }
+      const json = await proxied.json();
+      return NextResponse.json(json);
     }
 
     // Process files (simplified - in production, use proper NIfTI parser)
-    // For now, we'll return a mock response structure
+    // For now, we'll return a mock response structure (no TF on Vercel)
     // You'll need to implement proper NIfTI file parsing using a library like 'nifti-reader-js'
     
     // Mock processing for demonstration

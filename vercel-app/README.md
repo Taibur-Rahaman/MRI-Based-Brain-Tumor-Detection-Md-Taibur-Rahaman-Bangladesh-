@@ -40,40 +40,19 @@ A production-ready Next.js web application for MRI-based brain tumor detection a
    MODEL_CDN_URL=https://your-cdn.com/model
    ```
 
-## 🔧 Model Setup
+## 🔧 Inference Setup (External API Recommended)
 
-The application requires the Keras model to be converted to TensorFlow.js format for browser/Node.js compatibility.
+This Vercel deployment uses a lightweight API that can proxy your upload to an external inference service.
 
-### Converting Your Model
+### Option A: Use an external inference API (recommended)
+1. Deploy your model behind an HTTPS endpoint (e.g., FastAPI on Render/Cloud Run, or Gradio/Hugging Face Spaces).
+2. Set the environment variable on Vercel:
+   - In Project Settings → Environment Variables:
+     - `INFERENCE_API_URL` = `https://your-inference.example.com/predict`
+3. The API route will forward the uploaded files to this URL and return the result to the UI.
 
-1. **Install TensorFlow.js converter:**
-   ```bash
-   pip install tensorflowjs
-   ```
-
-2. **Convert the Keras model:**
-   ```bash
-   tensorflowjs_converter \
-     --input_format keras \
-     --output_format tfjs_layers_model \
-     ../cse499_brain_tumor_model-keras-default-v1/brain_tumor_model.keras \
-     ./public/models/
-   ```
-
-3. **Update the model path in `app/api/predict/route.ts`:**
-   ```typescript
-   model = await tf.loadLayersModel('/models/model.json');
-   ```
-
-### Alternative: Host Model on CDN
-
-For better performance on Vercel, consider hosting your model on:
-- AWS S3 + CloudFront
-- Google Cloud Storage
-- Vercel Blob Storage
-- Hugging Face
-
-Then update the model URL in the API route.
+### Option B: Keep mock predictions (no model)
+If `INFERENCE_API_URL` is not set, the API returns mock predictions for demo purposes. This requires no model on Vercel.
 
 ## 🏃 Development
 
