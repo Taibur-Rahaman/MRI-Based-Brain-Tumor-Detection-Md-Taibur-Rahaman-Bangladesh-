@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Upload, X, File, AlertCircle, Sparkles } from 'lucide-react';
+import { Upload, X, File, AlertCircle, Sparkles, Image as ImageIcon, TestTube } from 'lucide-react';
+import { validateImageFile } from '@/lib/image-processor';
+import { validateNIfTIFile } from '@/lib/nifti-parser';
 
 interface FileUploadProps {
-  onPredict: (files: { t1: File; t1ce: File; t2: File; flair: File }) => void;
+  onPredict: (files: { t1: File; t1ce: File; t2: File; flair: File } | null) => void;
   loading: boolean;
 }
 
@@ -30,12 +32,26 @@ export default function FileUpload({ onPredict, loading }: FileUploadProps) {
 
   const handleFileSelect = (modality: keyof typeof files, file: File | null) => {
     if (file) {
-      // Validate file type (should be .nii or .nii.gz)
       const fileName = file.name.toLowerCase();
-      const isValid = fileName.endsWith('.nii') || fileName.endsWith('.nii.gz');
+      const isNIfTI = fileName.endsWith('.nii') || fileName.endsWith('.nii.gz');
+      const isImage = fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || 
+                      fileName.endsWith('.png') || fileName.endsWith('.bmp') || 
+                      fileName.endsWith('.webp');
       
-      if (!isValid) {
-        alert(`Invalid file type for ${modality}. Please upload a .nii or .nii.gz file.`);
+      if (isNIfTI) {
+        const validation = validateNIfTIFile(file);
+        if (!validation.valid) {
+          alert(`Invalid NIfTI file for ${modality}: ${validation.error}`);
+          return;
+        }
+      } else if (isImage) {
+        const validation = validateImageFile(file);
+        if (!validation.valid) {
+          alert(`Invalid image file for ${modality}: ${validation.error}`);
+          return;
+        }
+      } else {
+        alert(`Invalid file type for ${modality}. Please upload a .nii, .nii.gz, or image file (JPG, PNG).`);
         return;
       }
 
@@ -64,6 +80,10 @@ export default function FileUpload({ onPredict, loading }: FileUploadProps) {
   };
 
   const allFilesUploaded = files.t1 && files.t1ce && files.t2 && files.flair;
+
+  const handleTestMode = () => {
+    onPredict(null);
+  };
 
   const modalities = [
     { key: 't1' as const, label: 'T1', description: 'T1-weighted MRI' },
@@ -118,7 +138,10 @@ export default function FileUpload({ onPredict, loading }: FileUploadProps) {
                       {description}
                     </p>
                     <p className="text-xs text-blue-600 dark:text-blue-400">
-                      Click to upload .nii file
+                      Click to upload .nii or image file
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      Supports: .nii, .jpg, .png
                     </p>
                   </>
                 )}
@@ -126,7 +149,7 @@ export default function FileUpload({ onPredict, loading }: FileUploadProps) {
               <input
                 ref={fileInputs[key]}
                 type="file"
-                accept=".nii,.nii.gz"
+                accept=".nii,.nii.gz,.jpg,.jpeg,.png,.bmp,.webp"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null;
@@ -142,29 +165,46 @@ export default function FileUpload({ onPredict, loading }: FileUploadProps) {
       {!allFilesUploaded && (
         <div className="flex items-start gap-2 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
           <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-yellow-800 dark:text-yellow-200">
-            Please upload all four MRI modalities (T1, T1ce, T2, and FLAIR) to proceed with tumor detection.
-          </p>
+          <div className="flex-1">
+            <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-1">
+              Please upload all four MRI modalities (T1, T1ce, T2, and FLAIR) to proceed with tumor detection.
+            </p>
+            <p className="text-xs text-yellow-700 dark:text-yellow-300">
+              Supported formats: NIfTI (.nii) or image files (.jpg, .png)
+            </p>
+          </div>
         </div>
       )}
 
-      <button
-        onClick={handlePredict}
-        disabled={!allFilesUploaded || loading}
-        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold py-4 px-6 rounded-lg transition-all duration-200 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-      >
-        {loading ? (
-          <>
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            <span>Processing...</span>
-          </>
-        ) : (
-          <>
-            <Sparkles className="w-5 h-5" />
-            <span>Detect Brain Tumor</span>
-          </>
-        )}
-      </button>
+      <div className="flex gap-3">
+        <button
+          onClick={handlePredict}
+          disabled={!allFilesUploaded || loading}
+          className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold py-4 px-6 rounded-lg transition-all duration-200 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>Processing...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-5 h-5" />
+              <span>Detect Brain Tumor</span>
+            </>
+          )}
+        </button>
+        
+        <button
+          onClick={handleTestMode}
+          disabled={loading}
+          className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white font-semibold py-4 px-6 rounded-lg transition-all duration-200 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          title="Try with demo/test data"
+        >
+          <TestTube className="w-5 h-5" />
+          <span className="hidden sm:inline">Test Mode</span>
+        </button>
+      </div>
     </div>
   );
 }

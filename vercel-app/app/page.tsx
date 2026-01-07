@@ -15,12 +15,31 @@ export default function Home() {
     t1ce: File;
     t2: File;
     flair: File;
-  }) => {
+  } | null = null) => {
     setLoading(true);
     setError(null);
     setPredictionData(null);
 
     try {
+      // If no files provided, use test mode
+      if (!files) {
+        const { generateMockPrediction } = await import('@/lib/test-files');
+        const mockData = generateMockPrediction();
+        const { extractTumorStatistics } = await import('@/lib/utils');
+        const statistics = extractTumorStatistics(mockData.prediction, mockData.shape);
+        
+        setPredictionData({
+          success: true,
+          prediction: mockData.prediction,
+          shape: mockData.shape,
+          statistics,
+          timestamp: new Date().toISOString(),
+          method: 'test_mode'
+        });
+        setLoading(false);
+        return;
+      }
+
       const formData = new FormData();
       formData.append('t1', files.t1);
       formData.append('t1ce', files.t1ce);
@@ -44,6 +63,10 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTestMode = () => {
+    handlePrediction(null);
   };
 
   return (

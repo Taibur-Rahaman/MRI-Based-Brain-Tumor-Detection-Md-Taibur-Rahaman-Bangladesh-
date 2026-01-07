@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractTumorStatistics, preprocessMRI, resizeVolume, stackModalities } from '@/lib/utils';
 import { parseNIfTI, validateNIfTIFile } from '@/lib/nifti-parser';
+import { loadImageAsArray, stackImagesToVolume, resizeImage, validateImageFile } from '@/lib/image-processor';
 import { loadModel } from '@/lib/model-loader';
 import * as tf from '@tensorflow/tfjs';
 
@@ -39,11 +40,33 @@ export async function POST(request: NextRequest) {
       { file: flairFile, name: 'FLAIR' }
     ];
 
+    // Validate files (support both NIfTI and images)
     for (const { file, name } of files) {
-      const validation = validateNIfTIFile(file);
-      if (!validation.valid) {
+      const fileName = file.name.toLowerCase();
+      const isNIfTI = fileName.endsWith('.nii') || fileName.endsWith('.nii.gz');
+      const isImage = fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || 
+                      fileName.endsWith('.png') || fileName.endsWith('.bmp') || 
+                      fileName.endsWith('.webp');
+      
+      if (isNIfTI) {
+        const validation = validateNIfTIFile(file);
+        if (!validation.valid) {
+          return NextResponse.json(
+            { error: `${name} file validation failed: ${validation.error}` },
+            { status: 400 }
+          );
+        }
+      } else if (isImage) {
+        const validation = validateImageFile(file);
+        if (!validation.valid) {
+          return NextResponse.json(
+            { error: `${name} file validation failed: ${validation.error}` },
+            { status: 400 }
+          );
+        }
+      } else {
         return NextResponse.json(
-          { error: `${name} file validation failed: ${validation.error}` },
+          { error: `${name} file must be a NIfTI (.nii) or image file (.jpg, .png)` },
           { status: 400 }
         );
       }
@@ -85,27 +108,82 @@ export async function POST(request: NextRequest) {
 
     // Option 2: Local TensorFlow.js inference (fallback)
     try {
-      // Parse NIfTI files
-      const [t1Data, t1ceData, t2Data, flairData] = await Promise.all([
-        parseNIfTI(t1File),
-        parseNIfTI(t1ceFile),
-        parseNIfTI(t2File),
-        parseNIfTI(flairFile)
-      ]);
+      // Check file types and process accordingly
+      const getFileType = (file: File) => {
+        const name = file.name.toLowerCase();
+        if (name.endsWith('.nii') || name.endsWith('.nii.gz')) return 'nifti';
+        if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || 
+            name.endsWith('.bmp') || name.endsWith('.webp')) return 'image';
+        return 'unknown';
+      };
+
+      const t1Type = getFileType(t1File);
+      const t1ceType = getFileType(t1ceFile);
+      const t2Type = getFileType(t2File);
+      const flairType = getFileType(flairFile);
 
       // Get target shape (standardize to model input size)
       const targetShape: [number, number, number] = [128, 128, 96];
       
-      // Preprocess and resize all modalities
-      const t1Processed = preprocessMRI(t1Data.data);
-      const t1ceProcessed = preprocessMRI(t1ceData.data);
-      const t2Processed = preprocessMRI(t2Data.data);
-      const flairProcessed = preprocessMRI(flairData.data);
+      let t1Resized: Float32Array;
+      let t1ceResized: Float32Array;
+      let t2Resized: Float32Array;
+      let flairResized: Float32Array;
 
-      const t1Resized = resizeVolume(t1Processed, t1Data.shape, targetShape);
-      const t1ceResized = resizeVolume(t1ceProcessed, t1ceData.shape, targetShape);
-      const t2Resized = resizeVolume(t2Processed, t2Data.shape, targetShape);
-      const flairResized = resizeVolume(flairProcessed, flairData.shape, targetShape);
+      // Process NIfTI files
+      if (t1Type === 'nifti' && t1ceType === 'nifti' && t2Type === 'nifti' && flairType === 'nifti') {
+        const [t1Data, t1ceData, t2Data, flairData] = await Promise.all([
+          parseNIfTI(t1File),
+          parseNIfTI(t1ceFile),
+          parseNIfTI(t2File),
+          parseNIfTI(flairFile)
+        ]);
+
+        const t1Processed = preprocessMRI(t1Data.data);
+        const t1ceProcessed = preprocessMRI(t1ceData.data);
+        const t2Processed = preprocessMRI(t2Data.data);
+        const flairProcessed = preprocessMRI(flairData.data);
+
+        t1Resized = resizeVolume(t1Processed, t1Data.shape, targetShape);
+        t1ceResized = resizeVolume(t1ceProcessed, t1ceData.shape, targetShape);
+        t2Resized = resizeVolume(t2Processed, t2Data.shape, targetShape);
+        flairResized = resizeVolume(flairProcessed, flairData.shape, targetShape);
+      } 
+      // Process image files
+      else if (t1Type === 'image' || t1ceType === 'image' || t2Type === 'image' || flairType === 'image') {
+        // Load images and convert to arrays
+        const [t1Img, t1ceImg, t2Img, flairImg] = await Promise.all([
+          loadImageAsArray(t1File),
+          loadImageAsArray(t1ceFile),
+          loadImageAsArray(t2File),
+          loadImageAsArray(flairFile)
+        ]);
+
+        // Estimate image dimensions from array length (assume square)
+        const imgSize = Math.floor(Math.sqrt(t1Img.length));
+        const imageShape: [number, number] = [imgSize, imgSize];
+
+        // Resize images to target 2D size
+        const target2D: [number, number] = [targetShape[0], targetShape[1]];
+        const t1Resized2D = resizeImage(t1Img, imageShape, target2D);
+        const t1ceResized2D = resizeImage(t1ceImg, imageShape, target2D);
+        const t2Resized2D = resizeImage(t2Img, imageShape, target2D);
+        const flairResized2D = resizeImage(flairImg, imageShape, target2D);
+
+        // Stack single images into 3D volumes
+        t1Resized = stackImagesToVolume([t1Resized2D], target2D, targetShape[2]);
+        t1ceResized = stackImagesToVolume([t1ceResized2D], target2D, targetShape[2]);
+        t2Resized = stackImagesToVolume([t2Resized2D], target2D, targetShape[2]);
+        flairResized = stackImagesToVolume([flairResized2D], target2D, targetShape[2]);
+
+        // Preprocess the volumes
+        t1Resized = preprocessMRI(t1Resized);
+        t1ceResized = preprocessMRI(t1ceResized);
+        t2Resized = preprocessMRI(t2Resized);
+        flairResized = preprocessMRI(flairResized);
+      } else {
+        throw new Error('Unsupported file format. Please use NIfTI (.nii) or image files (.jpg, .png)');
+      }
 
       // Stack modalities
       const stacked = stackModalities(t1Resized, t1ceResized, t2Resized, flairResized, targetShape);
