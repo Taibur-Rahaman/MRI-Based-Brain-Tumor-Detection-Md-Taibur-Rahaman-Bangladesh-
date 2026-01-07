@@ -2,8 +2,6 @@
  * Utility functions for image processing and model inference
  */
 
-import * as tf from '@tensorflow/tfjs-node';
-
 export interface ModalityMap {
   FLAIR: number;
   T1ce: number;
