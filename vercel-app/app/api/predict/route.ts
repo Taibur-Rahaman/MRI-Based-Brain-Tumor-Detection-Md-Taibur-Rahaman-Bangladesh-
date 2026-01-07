@@ -8,11 +8,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import * as tf from '@tensorflow/tfjs-node';
-import { preprocessMRI, resizeVolume, stackModalities, extractTumorStatistics } from '@/lib/utils';
+import { extractTumorStatistics } from '@/lib/utils';
 
 // Model loading (should be initialized once and reused)
-let model: tf.LayersModel | null = null;
+let model: any | null = null;
 
 async function loadModelOnce() {
   if (!model) {
