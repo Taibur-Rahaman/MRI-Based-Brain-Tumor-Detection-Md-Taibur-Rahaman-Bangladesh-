@@ -6,6 +6,7 @@ import { TrendingUp, Activity, AlertCircle, CheckCircle } from 'lucide-react';
 import { tumorLabels } from '@/lib/utils';
 
 // Dynamically import Plotly to avoid SSR issues
+// @ts-expect-error - react-plotly.js does not ship types; we also provide a local shim under /types
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
 
 interface PredictionResultsProps {
