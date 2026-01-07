@@ -7,13 +7,15 @@ import path from 'path';
 import fs from 'fs';
 
 // Custom Dice Coefficient metric class
-export class DiceCoefficient extends tf.metrics.Metric {
+// Note: Standalone class (not extending tf.metrics.Metric) for compatibility with current TF.js version
+export class DiceCoefficient {
   classId: number;
   diceSum: tf.Scalar;
   count: tf.Scalar;
+  name: string;
 
   constructor(classId: number, name: string = 'dice_coefficient') {
-    super(name);
+    this.name = name;
     this.classId = classId;
     this.diceSum = tf.scalar(0);
     this.count = tf.scalar(0);
