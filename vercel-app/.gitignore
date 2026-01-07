@@ -38,3 +38,16 @@ yarn-error.log*
 *.h5
 *.pkl
 models/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+
+# Logs
+*.log

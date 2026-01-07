@@ -40,19 +40,49 @@ A production-ready Next.js web application for MRI-based brain tumor detection a
    MODEL_CDN_URL=https://your-cdn.com/model
    ```
 
-## 🔧 Inference Setup (External API Recommended)
+## 🔧 Inference Setup
 
-This Vercel deployment uses a lightweight API that can proxy your upload to an external inference service.
+This application supports two inference methods for production use:
 
-### Option A: Use an external inference API (recommended)
-1. Deploy your model behind an HTTPS endpoint (e.g., FastAPI on Render/Cloud Run, or Gradio/Hugging Face Spaces).
-2. Set the environment variable on Vercel:
-   - In Project Settings → Environment Variables:
-     - `INFERENCE_API_URL` = `https://your-inference.example.com/predict`
-3. The API route will forward the uploaded files to this URL and return the result to the UI.
+### Option A: External Python API (Recommended - Best Accuracy) ⭐
 
-### Option B: Keep mock predictions (no model)
-If `INFERENCE_API_URL` is not set, the API returns mock predictions for demo purposes. This requires no model on Vercel.
+For the most accurate predictions, deploy the Python inference API separately:
+
+1. **Deploy Python API:**
+   - See `python-api/README.md` for detailed instructions
+   - Recommended platforms: Render (free tier), Railway, Google Cloud Run
+   - The API uses your trained Keras model directly for maximum accuracy
+
+2. **Configure Vercel:**
+   - Go to Vercel Dashboard → Your Project → Settings → Environment Variables
+   - Add: `INFERENCE_API_URL` = `https://your-python-api-url.com/predict`
+   - Redeploy your Next.js app
+
+3. **Benefits:**
+   - ✅ Full model accuracy (no conversion needed)
+   - ✅ Better performance with Python/TensorFlow
+   - ✅ Handles large files efficiently
+   - ✅ Proper NIfTI file parsing with nibabel
+
+### Option B: TensorFlow.js (Fallback)
+
+If you prefer to run inference directly in Vercel:
+
+1. **Convert your model:**
+   ```bash
+   cd vercel-app
+   chmod +x scripts/convert-model.sh
+   ./scripts/convert-model.sh
+   ```
+
+2. **Host model files:**
+   - Upload to CDN (AWS S3, Cloudflare, etc.)
+   - Or use Vercel Blob Storage
+
+3. **Set environment variable:**
+   - `MODEL_CDN_URL` = `https://your-cdn.com/model/model.json`
+
+4. **Note:** TensorFlow.js may have slightly lower accuracy due to model conversion and JavaScript limitations.
 
 ## 🏃 Development
 
@@ -68,36 +98,78 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## 🚀 Deployment to Vercel
 
-### Option 1: Deploy via Vercel CLI
+### Step 1: Deploy Python API (Recommended)
+
+First, deploy the Python inference API for best accuracy:
+
+1. **Choose a platform** (Render recommended for free tier):
+   - [Render](https://render.com) - Free tier available
+   - [Railway](https://railway.app) - Free tier available
+   - [Google Cloud Run](https://cloud.google.com/run) - Pay per use
+   - See `python-api/README.md` for detailed instructions
+
+2. **Deploy the API:**
+   - Follow the platform-specific guide in `python-api/README.md`
+   - Note your API URL (e.g., `https://brain-tumor-api.onrender.com`)
+
+### Step 2: Deploy Next.js App to Vercel
+
+#### Option A: Deploy via Vercel CLI
 
 1. **Install Vercel CLI:**
    ```bash
    npm i -g vercel
    ```
 
-2. **Deploy:**
+2. **Login:**
+   ```bash
+   vercel login
+   ```
+
+3. **Deploy:**
    ```bash
    cd vercel-app
    vercel
    ```
 
-3. **Follow the prompts** to link your project and deploy.
+4. **Set environment variables:**
+   ```bash
+   vercel env add INFERENCE_API_URL
+   # Enter your Python API URL when prompted
+   ```
 
-### Option 2: Deploy via GitHub
+5. **Deploy to production:**
+   ```bash
+   vercel --prod
+   ```
+
+#### Option B: Deploy via GitHub (Recommended)
 
 1. **Push your code to GitHub:**
    ```bash
    git add .
-   git commit -m "Add Vercel app"
-   git push
+   git commit -m "Ready for Vercel deployment"
+   git push origin main
    ```
 
 2. **Import project on Vercel:**
-   - Go to [vercel.com](https://vercel.com)
-   - Click "New Project"
-   - Import your GitHub repository
-   - Set root directory to `vercel-app`
-   - Deploy!
+   - Go to [vercel.com/new](https://vercel.com/new)
+   - Click "Import" and select your GitHub repository
+   - Configure:
+     - **Root Directory**: `vercel-app`
+     - **Framework Preset**: Next.js (auto-detected)
+     - **Build Command**: `npm run build` (default)
+     - **Output Directory**: `.next` (default)
+
+3. **Add Environment Variables:**
+   - Go to Project Settings → Environment Variables
+   - Add: `INFERENCE_API_URL` = `https://your-python-api-url.com/predict`
+   - Select all environments (Production, Preview, Development)
+
+4. **Deploy:**
+   - Click "Deploy"
+   - Wait for build to complete
+   - Your app will be live at `https://your-project.vercel.app`
 
 ### Important Vercel Configuration
 
@@ -180,18 +252,46 @@ To improve accuracy, consider:
 
 ## ⚠️ Important Notes
 
-1. **Model Size**: Large model files may exceed Vercel's limits. Consider:
-   - Using Git LFS
-   - Hosting models externally
-   - Using model compression/quantization
+1. **File Format**: Currently supports uncompressed `.nii` files. For `.nii.gz` files, use the Python API which handles gzip decompression.
 
-2. **Processing Time**: MRI processing can be slow. Vercel Pro plan recommended for production (60s timeout).
+2. **File Size Limits**: 
+   - Vercel: 50MB per request (configured in `next.config.js`)
+   - Python API: Depends on hosting platform (typically 100MB)
+   - For larger files, consider compression or chunked uploads
 
-3. **File Parsing**: The current implementation uses mock data. For production, integrate a proper NIfTI parser like:
-   - `nifti-reader-js`
-   - `nifti-js`
+3. **Processing Time**: 
+   - Vercel Hobby: 10s timeout (may not be enough)
+   - Vercel Pro: 60s timeout (recommended)
+   - Python API: No timeout limits (depends on platform)
 
-4. **Security**: Add authentication and rate limiting for production use.
+4. **Accuracy**: 
+   - Python API: Full model accuracy (recommended)
+   - TensorFlow.js: Slightly lower due to conversion, but still good
+
+5. **Security**: For production, consider:
+   - Adding authentication (NextAuth.js, API keys)
+   - Rate limiting
+   - Input validation (already implemented)
+   - HTTPS only (automatic on Vercel)
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Issue: "Function Timeout"**
+- Solution: Upgrade to Vercel Pro or use Python API
+
+**Issue: "Payload Too Large"**
+- Solution: Ensure files are under 50MB, or increase limit in `next.config.js`
+
+**Issue: "Model Not Loading"**
+- Solution: Check `MODEL_CDN_URL` or `INFERENCE_API_URL` environment variable
+
+**Issue: "NIfTI Parsing Failed"**
+- Solution: Ensure files are valid uncompressed `.nii` files (not `.nii.gz`)
+
+**Issue: "External API Error"**
+- Solution: Check Python API is running and accessible, verify CORS settings
 
 ## 📝 License
 
